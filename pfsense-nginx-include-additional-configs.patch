@@ -1,0 +1,14 @@
+diff -Naur /etc/inc/system.inc /etc/inc/system.inc
+--- /etc/inc/system.inc 2018-06-11 11:15:03.732365000 +0300
++++ /etc/etc/system.inc 2018-06-11 11:16:17.371524000 +0300
+@@ -1448,6 +1448,10 @@
+ user  root wheel;
+ worker_processes  {$max_procs};
+
++include /usr/local/etc/nginx/modules.d/*.conf;
++include /usr/local/etc/nginx/config.d/*.conf;
++
++
+ EOD;
+
+        if (!isset($config['syslog']['nolognginx'])) {
