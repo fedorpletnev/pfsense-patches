@@ -1,0 +1,237 @@
+diff -Naur /etc/inc/dyndns.class /etc/inc/dyndns.class
+--- /etc/inc/dyndns.class	2018-06-12 11:42:55.580592000 +0300
++++ /etc/inc/dyndns.class	2018-06-12 08:42:00.000000000 +0300
+@@ -46,6 +46,7 @@
+ 	 *    - DNS-O-Matic (dnsomatic.com)
+ 	 *    - Custom DDNS (any URL)
+ 	 *    - Custom DDNS IPv6 (any URL)
++	 *    - Yandex.PDD (pdd.yandex.ru)
+ 	 *    - CloudFlare (www.cloudflare.com)
+ 	 *    - CloudFlare IPv6 (www.cloudflare.com)
+ 	 *    - Eurodns (eurodns.com)
+@@ -123,6 +124,7 @@
+ 	 *  ClouDNS         - Last Tested: 22 August 2017
+ 	 *  GoDaddy         - Last Tested: 22 November 2017
+ 	 *  GoDaddy IPv6    - Last Tested: 22 November 2017
++	 *  Yandex.PDD      - Last Tested: 10 June 2018
+ 	 * +====================================================+
+ 	 *
+ 	 * @author 	E.Kristensen
+@@ -132,6 +134,7 @@
+ 	 *
+ 	 * DNSexit/OpenDNS support and multiwan extension for pfSense by Ermal Luçi
+ 	 * Custom DNS support by Matt Corallo
++	 * Yandex.PDD support by Fedor Pletnev
+ 	 *
+ 	 */
+ 
+@@ -244,6 +247,11 @@
+ 			case 'custom':
+ 				if (!$dnsUpdateURL) $this->_error(7);
+ 				break;
++			case 'yapdd':
++				if (!$dnsUser) $this->_error(3);
++				if (!$dnsDomain) $this->_error(5);
++				if (!$dnsZoneID) $this->_error(8);
++				break;
+ 			default:
+ 				if (!$dnsUser) $this->_error(3);
+ 				if (!$dnsPass) $this->_error(4);
+@@ -323,6 +331,7 @@
+ 					case 'dnsexit':
+ 					case 'custom':
+ 					case 'custom-v6':
++					case 'yapdd':
+ 					case 'opendns':
+ 					case 'namecheap':
+ 					case 'he-net':
+@@ -744,6 +753,20 @@
+ 					}
+ 					curl_setopt($ch, CURLOPT_URL, $server);
+ 					break;
++				case 'yapdd':
++					if (empty($this->_dnsTTL)) $this->_dnsTTL = 90;
++					$httpHeader = array('PddToken: '.$this->_dnsUser);
++					$postParams = array('domain' => $this->_dnsDomain, 'record_id' => $this->_dnsZoneID, 'content' => $this->_dnsIP, 'ttl' => $this->_dnsTTL);
++					curl_setopt($ch, CURLOPT_URL, 'https://pddimp.yandex.ru/api2/admin/dns/edit');
++					curl_setopt($ch, CURLOPT_POST, TRUE);
++					curl_setopt($ch, CURLOPT_HTTPHEADER, $httpHeader);
++					curl_setopt($ch, CURLOPT_POSTFIELDS, $postParams);
++					if ($this->_curlSslVerifypeer) {
++						curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, TRUE);
++					} else {
++						curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
++					}
++					break;
+ 				case 'cloudflare-v6':
+ 				case 'cloudflare':
+ 					$this->_FQDN = ltrim($this->_FQDN, '@.');
+@@ -1674,6 +1697,68 @@
+ 						$status = $status_intro . $error_str . gettext("Result did not match.") . " [" . $data . "]";
+ 					}
+ 					break;
++				case 'yapdd':
++					$output = json_decode($data);
++					if ($this->_dnsVerboseLog) {
++						log_error(sprintf(gettext('_checkStatus() results: %1$s'), $data));
++					}
++					if ($output->success == 'ok') {
++						$fqdn = $output->record->fqdn;
++						$status = $status_intro . $success_str . gettext("IP address for '$fqdn' changed successfully!");
++						$successful_update = true;
++					} else {
++						switch ($output->error) {
++							case 'no_token':
++								$status = $status_intro . $error_str . gettext("Bad Request - Missing token.");
++								break;
++							case 'no_domain':
++								$status = $status_intro . $error_str . gettext("Bad Request - Missing domain.");
++								break;
++							case 'no_ip':
++								$status = $status_intro . $error_str . gettext("Bad Request - Missing IP address.");
++								break;
++							case 'bad_domain':
++								$status = $status_intro . $error_str . gettext("Bad Request - Bad domain.");
++								break;
++							case 'prohibited':
++								$status = $status_intro . $error_str . gettext("Bad Request - Prohibited domain.");
++								break;
++							case 'bad_token':
++								$status = $status_intro . $error_str . gettext("Bad Request - Invalid token.");
++								break;
++							case 'bad_login':
++								$status = $status_intro . $error_str . gettext("Bad Request - Invalid login.");
++								break;
++							case 'bad_passwd':
++								$status = $status_intro . $error_str . gettext("Bad Request - Invalid password.");
++								break;
++							case 'no_auth':
++								$status = $status_intro . $error_str . gettext("Bad Request - Token not defined.");
++								break;
++							case 'not_allowed':
++								$status = $status_intro . $error_str . gettext("Bad Request - User unable to administer the selected domain.");
++								break;
++							case 'blocked':
++								$status = $status_intro . $error_str . gettext("Bad Request - Domain is blocked.");
++								break;
++							case 'occupied':
++								$status = $status_intro . $error_str . gettext("Bad Request - Domain is occupied by another user.");
++								break;
++							case 'domain_limit_reached':
++								$status = $status_intro . $error_str . gettext("Bad Request - Domain limit reached.");
++								break;
++							case 'no_reply':
++								$status = $status_intro . $error_str . gettext("Bad Request - No reply from remote server.");
++								break;
++							case 'unknown':
++							default:
++								$status = $status_intro . "(" . gettext("Unknown Response") . ")";
++								log_error($status_intro . gettext("PAYLOAD:") . " " . $data);
++								$this->_debug($data);
++								break;
++						}
++					}
++					break;
+ 				case 'cloudflare-v6':
+ 				case 'cloudflare':
+ 					$output = json_decode($data);
+diff -Naur /etc/inc/services.inc /etc/inc/services.inc
+--- /etc/inc/services.inc	2018-06-12 11:42:55.581751000 +0300
++++ /etc/inc/services.inc	2018-06-12 08:42:00.000000000 +0300
+@@ -24,8 +24,8 @@
+  */
+ 
+ 
+-define('DYNDNS_PROVIDER_VALUES', 'all-inkl citynetwork cloudflare cloudflare-v6 cloudns custom custom-v6 dnsexit dnsimple dnsmadeeasy dnsomatic dreamhost dreamhost-v6 duiadns duiadns-v6 dyndns dyndns-custom dyndns-static dyns easydns eurodns freedns freedns-v6 glesys godaddy godaddy-v6 googledomains gratisdns he-net he-net-v6 he-net-tunnelbroker hover loopia namecheap noip noip-free ods opendns ovh-dynhost route53 route53-v6 selfhost spdyn spdyn-v6 zoneedit');
+-define('DYNDNS_PROVIDER_DESCRIPTIONS', 'All-Inkl.com,City Network,CloudFlare,CloudFlare (v6),ClouDNS,Custom,Custom (v6),DNSexit,DNSimple,DNS Made Easy,DNS-O-Matic,DreamHost,Dreamhost (v6),DuiaDns.net,DuiaDns.net (v6),DynDNS (dynamic),DynDNS (custom),DynDNS (static),DyNS,easyDNS,Euro Dns,freeDNS,freeDNS (v6),GleSYS,GoDaddy,GoDaddy (v6),Google Domains,GratisDNS,HE.net,HE.net (v6),HE.net Tunnelbroker,Hover,Loopia,Namecheap,No-IP,No-IP (free),ODS.org,OpenDNS,OVH DynHOST,Route 53,Route 53 (v6),SelfHost,SPDYN,SPDYN (v6),ZoneEdit');
++define('DYNDNS_PROVIDER_VALUES', 'all-inkl citynetwork cloudflare cloudflare-v6 cloudns custom custom-v6 dnsexit dnsimple dnsmadeeasy dnsomatic dreamhost dreamhost-v6 duiadns duiadns-v6 dyndns dyndns-custom dyndns-static dyns easydns eurodns freedns freedns-v6 glesys godaddy godaddy-v6 googledomains gratisdns he-net he-net-v6 he-net-tunnelbroker hover loopia namecheap noip noip-free ods opendns ovh-dynhost route53 route53-v6 selfhost spdyn spdyn-v6 zoneedit yapdd');
++define('DYNDNS_PROVIDER_DESCRIPTIONS', 'All-Inkl.com,City Network,CloudFlare,CloudFlare (v6),ClouDNS,Custom,Custom (v6),DNSexit,DNSimple,DNS Made Easy,DNS-O-Matic,DreamHost,Dreamhost (v6),DuiaDns.net,DuiaDns.net (v6),DynDNS (dynamic),DynDNS (custom),DynDNS (static),DyNS,easyDNS,Euro Dns,freeDNS,freeDNS (v6),GleSYS,GoDaddy,GoDaddy (v6),Google Domains,GratisDNS,HE.net,HE.net (v6),HE.net Tunnelbroker,Hover,Loopia,Namecheap,No-IP,No-IP (free),ODS.org,OpenDNS,OVH DynHOST,Route 53,Route 53 (v6),SelfHost,SPDYN,SPDYN (v6),ZoneEdit,Yandex.PDD');
+ 
+ /* implement ipv6 route advertising daemon */
+ function services_radvd_configure($blacklist = array()) {
+diff -Naur /usr/local/www/services_dyndns_edit.php /usr/local/www/services_dyndns_edit.php
+--- /usr/local/www/services_dyndns_edit.php	2018-06-12 11:42:55.582534000 +0300
++++ /usr/local/www/services_dyndns_edit.php	2018-06-12 08:42:00.000000000 +0300
+@@ -101,10 +101,26 @@
+ 		$reqdfieldsn[] = gettext("Update URL");
+ 	}
+ 
++	if ($pconfig['type'] == "yapdd") {
++		$reqdfields[] = "domainname";
++		$reqdfieldsn[] = gettext("Domain name");
++
++		if(in_array("host", $reqdfields)) $reqdfields = array_values(array_diff($reqdfields, array("host")));
++		if(in_array(gettext("Hostname", $reqdfieldsn)))	$reqdfieldsn = array_values(array_diff($reqdfieldsn, array(gettext("Hostname"))));
++		if(in_array("passwordfld", $reqdfields)) $reqdfields = array_values(array_diff($reqdfields, array("passwordfld")));
++		if(in_array(gettext("Password", $reqdfieldsn))) $reqdfieldsn = array_values(array_diff($reqdfieldsn, array(gettext("Password"))));
++
++		if (in_array("domainname", $reqdfields) && !is_domain($_POST['domainname'])) {
++			$input_errors[] = gettext("The domain may only contain the characters a-z, 0-9, '-' and '.'.");
++		}
++	}
++
+ 	do_input_validation($_POST, $reqdfields, $reqdfieldsn, $input_errors);
+ 
+-	if ($_POST['passwordfld'] != $_POST['passwordfld_confirm']) {
+-		$input_errors[] = gettext("Password and confirmed password must match.");
++	if(in_array("passwordfld", $reqdfields)) {
++		if ($_POST['passwordfld'] != $_POST['passwordfld_confirm']) {
++			$input_errors[] = gettext("Password and confirmed password must match.");
++		}
+ 	}
+ 
+ 	if (isset($_POST['host']) && in_array("host", $reqdfields)) {
+@@ -174,6 +190,7 @@
+ 		// Trim hard-to-type but sometimes returned characters
+ 		$dyndns['resultmatch'] = trim($_POST['resultmatch'], "\t\n\r");
+ 		($dyndns['type'] == "custom" || $dyndns['type'] == "custom-v6") ? $dyndns['requestif'] = $_POST['requestif'] : $dyndns['requestif'] = $_POST['interface'];
++		if ($dyndns['type'] == "yapdd") $dyndns['requestif'] = $_POST['requestif'];
+ 		$dyndns['descr'] = $_POST['descr'];
+ 		$dyndns['force'] = isset($_POST['force']);
+ 
+@@ -302,6 +319,7 @@
+ 			'GleSYS: Enter the record ID.%1$s' .
+ 			'DNSimple: Enter only the domain name.%1$s' .
+ 			'Namecheap, Cloudflare, GratisDNS, Hover, ClouDNS, GoDaddy: Enter the hostname and the domain separately, with the domain being the domain or subdomain zone being handled by the provider.%1$s' .
++			'Yandex.PDD: Enter only the domain name.%1$s' .
+ 			'Cloudflare: Enter @ as the hostname to indicate an empty field.', '<br />');
+ 
+ $section->add($group);
+@@ -362,6 +380,7 @@
+ 			'GleSYS: Enter the API user.%1$s' .
+ 			'Dreamhost: Enter a value to appear in the DNS record comment.%1$s' .
+ 			'Godaddy:: Enter the API key.%1$s' .
++			'Yandex.PDD: Enter the API token.%1$s' .
+ 			'For Custom Entries, Username and Password represent HTTP Authentication username and passwords.', '<br />');
+ 
+ $section->addPassword(new Form_Input(
+@@ -384,6 +403,7 @@
+ 	'text',
+ 	$pconfig['zoneid']
+ ))->setHelp('Route53: Enter AWS Zone ID.%1$s' .
++			'Yandex.PDD: Enter the Record ID of record to update.%1$s' .
+ 			'DNSimple: Enter the Record ID of record to update.', '<br />');
+ 
+ $section->addInput(new Form_Input(
+@@ -446,6 +466,21 @@
+ 
+ 	function setVisible(service) {
+ 		switch (service) {
++			case "yapdd" :
++				hideGroupInput('domainname', false);
++				hideInput('resultmatch', true);
++				hideInput('updateurl', true);
++				hideInput('requestif', false);
++				hideInput('passwordfld', true);
++				hideCheckbox('curl_ipresolve_v4', true);
++				hideCheckbox('curl_ssl_verifypeer', false);
++				hideGroupInput('host', true);
++				hideInput('mx', true);
++				hideCheckbox('wildcard', true);
++				hideCheckbox('proxied', true);
++				hideInput('zoneid', false);
++				hideInput('ttl', false);
++				break;
+ 			case "custom" :
+ 			case "custom-v6" :
+ 				hideGroupInput('domainname', true);
