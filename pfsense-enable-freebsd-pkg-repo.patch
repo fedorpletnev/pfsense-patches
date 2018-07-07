@@ -1,0 +1,12 @@
+diff -Naur /usr/local/etc/pkg/repos/FreeBSD.conf /usr/local/etc/pkg/repos/FreeBSD.conf
+--- /usr/local/etc/pkg/repos/FreeBSD.conf      2018-07-07 15:20:14.407950000 +0300
++++ /usr/local/etc/pkg/repos/FreeBSD.conf       2018-07-07 15:30:05.458462000 +0300
+@@ -1 +1 @@
+-FreeBSD: { enabled: no  }
++FreeBSD: { enabled: yes }
+diff -Naur /usr/local/share/pfSense/pkg/repos/pfSense-repo.conf /usr/local/share/pfSense/pkg/repos/pfSense-repo.conf
+--- /usr/local/share/pfSense/pkg/repos/pfSense-repo.conf       2018-07-07 15:34:43.396368000 +0300
++++ /usr/local/share/pfSense/pkg/repos/pfSense-repo.conf        2018-07-07 15:30:09.083382000 +0300
+@@ -1 +1 @@
+-FreeBSD: { enabled: no }
++FreeBSD: { enabled: yes }
