@@ -1,3 +1,4 @@
+diff -Naur /etc/rc.initial /etc/rc.initial
 --- /etc/rc.initial    2018-07-07 12:51:49.031919000 +0300
 +++ /etc/rc.initial     2018-07-07 12:52:54.301102000 +0300
 @@ -121,7 +121,11 @@
