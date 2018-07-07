@@ -1,0 +1,15 @@
+--- /etc/rc.initial    2018-07-07 12:51:49.031919000 +0300
++++ /etc/rc.initial     2018-07-07 12:52:54.301102000 +0300
+@@ -121,7 +121,11 @@
+        /etc/rc.initial.ping
+        ;;
+ 8)
+-       /bin/tcsh
++       if [ -x /usr/local/bin/bash ]; then
++           /usr/local/bin/bash
++       else
++           /bin/tcsh
++       fi
+        ;;
+ 9)
+        /usr/local/sbin/pftop
